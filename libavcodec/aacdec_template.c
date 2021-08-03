@@ -1351,22 +1351,70 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
 }
 
 /**
- * Skip data_stream_element; reference: table 4.10.
+ * decode data_stream_element; reference: table 4.10.
  */
-static int skip_data_stream_element(AACContext *ac, GetBitContext *gb)
+static int decode_data_stream_element(AACContext *ac, GetBitContext *gb, int dse_id)
 {
+    int byte_count;
+    int i = 0;
+    unsigned char buffer[1024];
+	AVFrameSideData *sd = NULL;
+	AVFrame *frame;
     int byte_align = get_bits1(gb);
     int count = get_bits(gb, 8);
     if (count == 255)
         count += get_bits(gb, 8);
     if (byte_align)
         align_get_bits(gb);
-
+    byte_count = count; 
     if (get_bits_left(gb) < 8 * count) {
-        av_log(ac->avctx, AV_LOG_ERROR, "skip_data_stream_element: "overread_err);
+        av_log(ac->avctx, AV_LOG_ERROR, "process_data_stream_element: "overread_err);
         return AVERROR_INVALIDDATA;
     }
-    skip_bits_long(gb, 8 * count);
+	if (byte_count == 0)
+        return 0;
+    while (byte_count > 0 && byte_count < 1024) {
+        buffer[i++] = get_bits(gb, 8);
+        byte_count--;
+	}
+	// Assign found DSE to an AVFrameSideData. 
+	// If it does not exist yet, create one
+	if (dse_id > 7) {
+		av_log(ac->avctx, AV_LOG_ERROR, "process_data_stream_element: more than 8 DSE");
+		return AVERROR_INVALIDDATA;
+	}
+	frame = ac->frame;
+    if (frame) {
+		int nb_side_data = frame->nb_side_data;
+		if (nb_side_data == 0 && dse_id == 0) {
+			// add new AVFrameSideData
+			sd = av_frame_new_side_data(frame, AV_FRAME_DATA_AUDIO_SERVICE_TYPE, count);
+			if (!sd) {
+				return AVERROR(ENOMEM);
+			}
+			memcpy(sd->data, buffer, count);
+		} else {
+			if (dse_id > 0 && dse_id > frame->nb_side_data) {
+				av_log(ac->avctx, AV_LOG_ERROR, "process_data_stream_element: dse_id == %d, maximum nb_side_data == %d", dse_id, frame->nb_side_data);
+				return AVERROR_BUG;
+			}
+			if (dse_id >= frame->nb_side_data) {
+				// add new AVFrameSideData
+				sd = av_frame_new_side_data(frame, AV_FRAME_DATA_AUDIO_SERVICE_TYPE, count);
+				if (!sd) {
+					return AVERROR(ENOMEM);
+				}
+				memcpy(sd->data, buffer, count);
+			} else {
+				// memory is already reserved
+				sd = frame->side_data[dse_id];
+				sd->type = AV_FRAME_DATA_AUDIO_SERVICE_TYPE;
+				av_realloc(sd->data, count);
+				memcpy(sd->data, buffer, count);
+				sd->size = count;
+			}
+		}
+	}
     return 0;
 }
 
@@ -3229,6 +3277,7 @@ static int aac_decode_frame_int(AVCodecContext *avctx, void *data,
     ChannelElement *che = NULL, *che_prev = NULL;
     enum RawDataBlockType elem_type, che_prev_type = TYPE_END;
     int err, elem_id;
+    int dse_count = 0;
     int samples = 0, multiplier, audio_found = 0, pce_found = 0;
     int is_dmono, sce_count = 0;
     int payload_alignment;
@@ -3314,7 +3363,8 @@ static int aac_decode_frame_int(AVCodecContext *avctx, void *data,
             break;
 
         case TYPE_DSE:
-            err = skip_data_stream_element(ac, gb);
+            err = decode_data_stream_element(ac, gb, dse_count);
+            dse_count++;
             break;
 
         case TYPE_PCE: {
