@@ -1376,6 +1376,7 @@ static int decode_data_stream_element(AACContext *ac, GetBitContext *gb, int dse
         skip_bits_long(gb, 8 * count);
         av_log(ac->avctx, AV_LOG_DEBUG, "decode_data_stream_element: "
                "byte_count (%d) >= %d", byte_count, DSE_BUFFER_SIZE);
+		count = 0; /* don't copy buffer into side data element, because DSE is too large */
     } else {
         while (byte_count > 0 && byte_count < DSE_BUFFER_SIZE) {
             buffer[i++] = get_bits(gb, 8);
