@@ -68,6 +68,36 @@ static int get_format_from_sample_fmt(const char **fmt,
     return -1;
 }
 
+/* This is just a debug function, not needed for normal operation */
+static void DumpHex(const void* data, size_t size) {
+    char ascii[17];
+    size_t i, j;
+    ascii[16] = '\0';
+    for (i = 0; i < size; ++i) {
+        fprintf(stderr, "%02X ", ((unsigned char*)data)[i]);
+        if (((unsigned char*)data)[i] >= ' ' && ((unsigned char*)data)[i] <= '~') {
+            ascii[i % 16] = ((unsigned char*)data)[i];
+        } else {
+            ascii[i % 16] = '.';
+        }
+        if ((i+1) % 8 == 0 || i+1 == size) {
+            fprintf(stderr, " ");
+            if ((i+1) % 16 == 0) {
+                fprintf(stderr, "|  %s \n", ascii);
+            } else if (i+1 == size) {
+                ascii[(i+1) % 16] = '\0';
+                if ((i+1) % 16 <= 8) {
+                    fprintf(stderr, " ");
+                }
+                for (j = (i+1) % 16; j < 16; ++j) {
+                    fprintf(stderr, "   ");
+                }
+                fprintf(stderr, "|  %s \n", ascii);
+            }
+        }
+    }
+}
+
 static void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
                    FILE *outfile)
 {
@@ -83,6 +113,7 @@ static void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
 
     /* read all the output frames (in general there may be any number of them */
     while (ret >= 0) {
+		AVFrameSideData* sd = NULL;
         ret = avcodec_receive_frame(dec_ctx, frame);
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
             return;
@@ -96,6 +127,10 @@ static void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
             fprintf(stderr, "Failed to calculate data size\n");
             exit(1);
         }
+		sd = av_frame_get_side_data(frame, AV_FRAME_DATA_DATA_STREAM_ELEMENT1);
+        if (sd) {
+			DumpHex(sd->data, sd->size); 
+		}
         for (i = 0; i < frame->nb_samples; i++)
             for (ch = 0; ch < dec_ctx->channels; ch++)
                 fwrite(frame->data[ch] + data_size*i, 1, data_size, outfile);
@@ -129,7 +164,7 @@ int main(int argc, char **argv)
     pkt = av_packet_alloc();
 
     /* find the MPEG audio decoder */
-    codec = avcodec_find_decoder(AV_CODEC_ID_MP2);
+    codec = avcodec_find_decoder(AV_CODEC_ID_AAC_LATM);
     if (!codec) {
         fprintf(stderr, "Codec not found\n");
         exit(1);

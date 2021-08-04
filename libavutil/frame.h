@@ -187,6 +187,17 @@ enum AVFrameSideDataType {
      * as described by AVDetectionBBoxHeader.
      */
     AV_FRAME_DATA_DETECTION_BBOXES,
+    /**
+     * Generic AAC data stream element containing binary data. Interpretation is dependent on context
+     */
+    AV_FRAME_DATA_DATA_STREAM_ELEMENT0,
+    AV_FRAME_DATA_DATA_STREAM_ELEMENT1,
+    AV_FRAME_DATA_DATA_STREAM_ELEMENT2,
+    AV_FRAME_DATA_DATA_STREAM_ELEMENT3,
+    AV_FRAME_DATA_DATA_STREAM_ELEMENT4,
+    AV_FRAME_DATA_DATA_STREAM_ELEMENT5,
+    AV_FRAME_DATA_DATA_STREAM_ELEMENT6,
+    AV_FRAME_DATA_DATA_STREAM_ELEMENT7,
 };
 
 enum AVActiveFormatDescription {
