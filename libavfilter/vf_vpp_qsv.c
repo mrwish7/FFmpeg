@@ -25,6 +25,7 @@
 
 #include "libavutil/opt.h"
 #include "libavutil/eval.h"
+#include "libavutil/hwcontext.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/mathematics.h"
 
@@ -42,7 +43,7 @@
 #define FLAGS (AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM)
 
 /* number of video enhancement filters */
-#define ENH_FILTERS_COUNT (7)
+#define ENH_FILTERS_COUNT (8)
 #define QSV_HAVE_ROTATION       QSV_VERSION_ATLEAST(1, 17)
 #define QSV_HAVE_MIRRORING      QSV_VERSION_ATLEAST(1, 19)
 #define QSV_HAVE_SCALING_CONFIG QSV_VERSION_ATLEAST(1, 19)
