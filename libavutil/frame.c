@@ -728,14 +728,7 @@ const char *av_frame_side_data_name(enum AVFrameSideDataType type)
     case AV_FRAME_DATA_SEI_UNREGISTERED:            return "H.26[45] User Data Unregistered SEI message";
     case AV_FRAME_DATA_FILM_GRAIN_PARAMS:           return "Film grain parameters";
     case AV_FRAME_DATA_DETECTION_BBOXES:            return "Bounding boxes for object detection and classification";
-    case AV_FRAME_DATA_DATA_STREAM_ELEMENT0:        return "AAC binary data stream element with id 0";
-    case AV_FRAME_DATA_DATA_STREAM_ELEMENT1:        return "AAC binary data stream element with id 1";
-    case AV_FRAME_DATA_DATA_STREAM_ELEMENT2:        return "AAC binary data stream element with id 2";
-    case AV_FRAME_DATA_DATA_STREAM_ELEMENT3:        return "AAC binary data stream element with id 3";
-    case AV_FRAME_DATA_DATA_STREAM_ELEMENT4:        return "AAC binary data stream element with id 4";
-    case AV_FRAME_DATA_DATA_STREAM_ELEMENT5:        return "AAC binary data stream element with id 5";
-    case AV_FRAME_DATA_DATA_STREAM_ELEMENT6:        return "AAC binary data stream element with id 6";
-    case AV_FRAME_DATA_DATA_STREAM_ELEMENT7:        return "AAC binary data stream element with id 7";
+    case AV_FRAME_DATA_RDS_DATA_PACKET:             return "UECP RDS data packet";
     }
     return NULL;
 }

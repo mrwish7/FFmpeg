@@ -1705,6 +1705,7 @@ EXAMPLE_LIST="
     avio_list_dir_example
     avio_reading_example
     decode_audio_example
+    decode_audio_rds_example
     decode_video_example
     demuxing_decoding_example
     encode_audio_example

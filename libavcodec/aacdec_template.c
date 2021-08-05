@@ -1352,6 +1352,10 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
 
 /**
  * decode data_stream_element; reference: table 4.10.
+ * A DSE is an arbitrary binary data element referenced to by it's "position"
+ * One could use the position of the DSE to identify it, but trying to identify the
+ * data we are interested in seems to be a better approach that fits better
+ * into the library access model of libavcodec/ffmpeg
  */
 static int decode_data_stream_element(AACContext *ac, GetBitContext *gb, int dse_id)
 {
@@ -1376,41 +1380,35 @@ static int decode_data_stream_element(AACContext *ac, GetBitContext *gb, int dse
         skip_bits_long(gb, 8 * count);
         av_log(ac->avctx, AV_LOG_DEBUG, "decode_data_stream_element: "
                "byte_count (%d) >= %d", byte_count, DSE_BUFFER_SIZE);
-		count = 0; /* don't copy buffer into side data element, because DSE is too large */
+        count = 0; /* don't copy buffer into side data element, because DSE is too large */
     } else {
         while (byte_count > 0 && byte_count < DSE_BUFFER_SIZE) {
             buffer[i++] = get_bits(gb, 8);
             byte_count--;
         }
     }
-    if (dse_id > 7) {
-        av_log(ac->avctx, AV_LOG_ERROR, "decode_data_stream_element: more than 8 DSE");
-        return AVERROR_INVALIDDATA;
-    }
     frame = ac->frame;
-    // Assign DSE to current decoded audio frame as SideData
-    // If it does not exist yet, create one
     if (frame) {
-        if (dse_id > frame->nb_side_data) {
-            // this "cannot happen", because we always enter with dse_id increasing one by one
-            av_log(ac->avctx, AV_LOG_ERROR, "decode_data_stream_element: dse_id == %d, "
-                   "maximum nb_side_data == %d", dse_id, frame->nb_side_data);
-            return AVERROR_BUG;
-        }
-        if (dse_id >= frame->nb_side_data) {
-            // add new AVFrameSideData
-            sd = av_frame_new_side_data(frame, AV_FRAME_DATA_DATA_STREAM_ELEMENT0 + dse_id, count);
-            if (!sd) {
-                return AVERROR(ENOMEM);
+        // Try to detect UECP radio data system data, as this is the
+        // only AAC side data we are currently interested in
+        if (count > 1) {
+            if (buffer[0] == 0xfe && buffer[count - 1] == 0xff) {
+                sd = av_frame_get_side_data(frame, AV_FRAME_DATA_RDS_DATA_PACKET);
+                if (!sd) {
+                    sd = av_frame_new_side_data(frame, AV_FRAME_DATA_RDS_DATA_PACKET, count);
+                    if (!sd) {
+                        return AVERROR(ENOMEM);
+                    }
+                    memcpy(sd->data, buffer, count);
+                } else {
+                    // memory is already reserved
+                    if (!av_realloc(sd->data, count)) {
+                        return AVERROR(ENOMEM);
+                    }
+                    memcpy(sd->data, buffer, count);
+                    sd->size = count;
+                }
             }
-            memcpy(sd->data, buffer, count);
-        } else {
-            // memory is already reserved
-            sd = frame->side_data[dse_id];
-            sd->type = AV_FRAME_DATA_DATA_STREAM_ELEMENT0 + dse_id;
-            av_realloc(sd->data, count);
-            memcpy(sd->data, buffer, count);
-            sd->size = count;
         }
     }
     return 0;
