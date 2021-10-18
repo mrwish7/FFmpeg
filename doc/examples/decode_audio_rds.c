@@ -103,7 +103,7 @@ static uint8_t ebu2latin1(uint8_t character) {
     return character;
 }
 
-static char * handle_rt(uint8_t* rds_message, uint8_t size) {
+static char * handle_rt(uint8_t* rds_message, uint8_t size, char * text) {
     uint8_t msg_len = rds_message[7];
     uint8_t i;
 	static char radiotext[128];
@@ -113,6 +113,7 @@ static char * handle_rt(uint8_t* rds_message, uint8_t size) {
     if (msg_len > 0x41) {
         msg_len = 0x41;
     }
+	radiotext[0x41] = 0;
     /* Cleanup old message */
     if (msg_len > 0) {
         for (i = msg_len - 1; i < 0x40; i++) {
@@ -124,18 +125,19 @@ static char * handle_rt(uint8_t* rds_message, uint8_t size) {
         /* is some character different? */
         radiotext[i - 9] = ebu2latin1(rds_message[i]);
     }
+	memcpy(text, radiotext, 0x41);
 	return radiotext;
 }
 
 /* Handle a RDS data chunk. */
-static void rds_handle_message(uint8_t* rds_message, uint8_t size, uint64_t audio_frame) {
+static void rds_handle_message(uint8_t* rds_message, uint8_t size, uint32_t audio_frame) {
     uint8_t type = rds_message[4];
-	char * text;
+	static char text[128];
     switch (type) {
         case 0x0a: // RT (Radiotexta)
 			// DumpHex(rds_message, size);
-            text = handle_rt(rds_message, size);
-			fprintf(stderr, "RT (Frame#%ld): %.64s\n", audio_frame, text);
+            handle_rt(rds_message, size, text);
+			fprintf(stderr, "RT (Frame#%d): %s\n", audio_frame, text);
             break;
         case 0x02:
             //handle_ps(rds_message, size); 
@@ -143,7 +145,7 @@ static void rds_handle_message(uint8_t* rds_message, uint8_t size, uint64_t audi
     }
 }
 
-static void rds_convert(uint8_t* buffer, size_t size, uint64_t audio_frame) {
+static void rds_convert(uint8_t* buffer, size_t size, uint32_t audio_frame) {
     static uint8_t current_pos = 0;
     static uint8_t rds_message[255];
     int32_t  i = 0;
@@ -173,7 +175,7 @@ static void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
 {
     int i, ch;
     int ret, data_size;
-	static int64_t frame_nr = 0;
+	static uint32_t frame_nr = 0;
     /* send the packet with the compressed data to the decoder */
     ret = avcodec_send_packet(dec_ctx, pkt);
     if (ret < 0) {
@@ -200,8 +202,29 @@ static void decode(AVCodecContext *dec_ctx, AVPacket *pkt, AVFrame *frame,
         }
 		sd = av_frame_get_side_data(frame, AV_FRAME_DATA_RDS_DATA_PACKET);
         if (sd) {
-			if ( sd->size >= 2) {
-				rds_convert(sd->data + 1, sd->size - 2, frame_nr);
+            unsigned char* data = sd->data;
+            if ( sd->size >= 2) {
+                int startval = 1;
+                int used = 0;
+                int count = 0; // ensure termination, also for broken data
+                while ( startval < (sd->size - 1) && count < 15 ) {
+                    int i = startval;
+                    for (; i < (sd->size - 1); i++) {
+                        if (   data[i] == 0xff
+                            && data[i+1] == 0xfe) {
+                            rds_convert(data + startval, i - startval, frame_nr);
+                            used += 1;
+                            startval = i + 2;
+                            break;
+                        }
+                    }
+                    count++;
+                }
+                if (used > 0) {
+                    rds_convert(data + startval, sd->size - startval - 1, frame_nr);
+                } else {
+                    rds_convert(sd->data + 1, sd->size - 2, frame_nr);
+                }
 			}
 		}
         for (i = 0; i < frame->nb_samples; i++)
