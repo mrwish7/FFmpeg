@@ -200,6 +200,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case AV_CODEC_ID_THEORA:      maxpixels  /= 16384; break;
     case AV_CODEC_ID_TRUEMOTION2: maxpixels  /= 1024;  break;
     case AV_CODEC_ID_TSCC:        maxpixels  /= 1024;  break;
+    case AV_CODEC_ID_VC1:         maxpixels  /= 8192;  break;
     case AV_CODEC_ID_VC1IMAGE:    maxpixels  /= 8192;  break;
     case AV_CODEC_ID_VMNC:        maxpixels  /= 8192;  break;
     case AV_CODEC_ID_VP3:         maxpixels  /= 4096;  break;
@@ -210,6 +211,8 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     case AV_CODEC_ID_VP9:         maxpixels  /= 4096;  break;
     case AV_CODEC_ID_WAVPACK:     maxsamples /= 1024;  break;
     case AV_CODEC_ID_WMV3IMAGE:   maxpixels  /= 8192;  break;
+    case AV_CODEC_ID_WMV2:        maxpixels  /= 1024;  break;
+    case AV_CODEC_ID_WMV3:        maxpixels  /= 1024;  break;
     case AV_CODEC_ID_WS_VQA:      maxpixels  /= 16384; break;
     case AV_CODEC_ID_WMALOSSLESS: maxsamples /= 1024;  break;
     case AV_CODEC_ID_ZEROCODEC:   maxpixels  /= 128;   break;
@@ -441,6 +444,10 @@ maximums_reached:
         got_frame = 0;
         av_frame_unref(frame);
         decode_handler(ctx, frame, &got_frame, avpkt);
+
+        nb_samples += frame->nb_samples;
+        if (nb_samples > maxsamples)
+            break;
     } while (got_frame == 1 && it++ < maxiteration);
 
     fprintf(stderr, "pixels decoded: %"PRId64", samples decoded: %"PRId64", iterations: %d\n", ec_pixels, nb_samples, it);

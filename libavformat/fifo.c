@@ -129,7 +129,7 @@ static int fifo_thread_write_header(FifoThreadContext *ctx)
 
     ret = av_dict_copy(&format_options, fifo->format_options, 0);
     if (ret < 0)
-        return ret;
+        goto end;
 
     ret = ff_format_output_open(avf2, avf->url, &format_options);
     if (ret < 0) {
@@ -139,7 +139,7 @@ static int fifo_thread_write_header(FifoThreadContext *ctx)
     }
 
     for (i = 0;i < avf2->nb_streams; i++)
-        avf2->streams[i]->internal->cur_dts = 0;
+        ffstream(avf2->streams[i])->cur_dts = 0;
 
     ret = avformat_write_header(avf2, &format_options);
     if (!ret)

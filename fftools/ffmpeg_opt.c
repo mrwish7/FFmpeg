@@ -138,9 +138,6 @@ const HWAccel hwaccels[] = {
 #if CONFIG_VIDEOTOOLBOX
     { "videotoolbox", videotoolbox_init, HWACCEL_VIDEOTOOLBOX, AV_PIX_FMT_VIDEOTOOLBOX },
 #endif
-#if CONFIG_LIBMFX
-    { "qsv",   qsv_init,   HWACCEL_QSV,   AV_PIX_FMT_QSV },
-#endif
     { 0 },
 };
 HWDevice *filter_hw_device;
@@ -172,7 +169,7 @@ int qp_hist           = 0;
 int stdin_interaction = 1;
 int frame_bits_per_raw_sample = 0;
 float max_error_rate  = 2.0/3;
-int filter_nbthreads = 0;
+char *filter_nbthreads;
 int filter_complex_nbthreads = 0;
 int vstats_version = 2;
 int auto_conversion_filters = 1;
@@ -265,6 +262,13 @@ static AVDictionary *strip_specifiers(AVDictionary *dict)
             *p = ':';
     }
     return ret;
+}
+
+static int opt_filter_threads(void *optctx, const char *opt, const char *arg)
+{
+    av_free(filter_nbthreads);
+    filter_nbthreads = av_strdup(arg);
+    return 0;
 }
 
 static int opt_abort_on(void *optctx, const char *opt, const char *arg)
@@ -571,6 +575,23 @@ static int opt_vaapi_device(void *optctx, const char *opt, const char *arg)
 }
 #endif
 
+#if CONFIG_QSV
+static int opt_qsv_device(void *optctx, const char *opt, const char *arg)
+{
+    const char *prefix = "qsv=__qsv_device:hw_any,child_device=";
+    int err;
+    char *tmp = av_asprintf("%s%s", prefix, arg);
+
+    if (!tmp)
+        return AVERROR(ENOMEM);
+
+    err = hw_device_init_from_string(tmp, NULL);
+    av_free(tmp);
+
+    return err;
+}
+#endif
+
 static int opt_init_hw_device(void *optctx, const char *opt, const char *arg)
 {
     if (!strcmp(arg, "list")) {
@@ -800,7 +821,8 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
         char *next;
         char *discard_str = NULL;
         const AVClass *cc = avcodec_get_class();
-        const AVOption *discard_opt = av_opt_find(&cc, "skip_frame", NULL, 0, 0);
+        const AVOption *discard_opt = av_opt_find(&cc, "skip_frame", NULL,
+                                                  0, AV_OPT_SEARCH_FAKE_OBJ);
 
         if (!ist)
             exit_program(1);
@@ -866,6 +888,10 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
             exit_program(1);
         }
 
+        ist->pkt = av_packet_alloc();
+        if (!ist->pkt)
+            exit_program(1);
+
         if (o->bitexact)
             ist->dec_ctx->flags |= AV_CODEC_FLAG_BITEXACT;
 
@@ -898,6 +924,12 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
                     "with old commandlines. This behaviour is DEPRECATED and will be removed "
                     "in the future. Please explicitly set \"-hwaccel_output_format cuda\".\n");
                 ist->hwaccel_output_format = AV_PIX_FMT_CUDA;
+            } else if (!hwaccel_output_format && hwaccel && !strcmp(hwaccel, "qsv")) {
+                av_log(NULL, AV_LOG_WARNING,
+                    "WARNING: defaulting hwaccel_output_format to qsv for compatibility "
+                    "with old commandlines. This behaviour is DEPRECATED and will be removed "
+                    "in the future. Please explicitly set \"-hwaccel_output_format qsv\".\n");
+                ist->hwaccel_output_format = AV_PIX_FMT_QSV;
             } else if (hwaccel_output_format) {
                 ist->hwaccel_output_format = av_get_pix_fmt(hwaccel_output_format);
                 if (ist->hwaccel_output_format == AV_PIX_FMT_NONE) {
@@ -1488,6 +1520,10 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
         exit_program(1);
     }
 
+    ost->pkt = av_packet_alloc();
+    if (!ost->pkt)
+        exit_program(1);
+
     if (ost->enc) {
         AVIOContext *s = NULL;
         char *buf = NULL, *arg = NULL, *preset = NULL;
@@ -1607,8 +1643,6 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
     av_dict_copy(&ost->swr_opts, o->g->swr_opts, 0);
     if (ost->enc && av_get_exact_bits_per_sample(ost->enc->id) == 24)
         av_dict_set(&ost->swr_opts, "output_sample_bits", "24", 0);
-
-    av_dict_copy(&ost->resample_opts, o->g->resample_opts, 0);
 
     ost->source_index = source_index;
     if (source_index >= 0) {
@@ -2179,7 +2213,6 @@ static int open_output_file(OptionsContext *o, const char *filename)
     InputStream  *ist;
     AVDictionary *unused_opts = NULL;
     AVDictionaryEntry *e = NULL;
-    int format_flags = 0;
 
     if (o->stop_time != INT64_MAX && o->recording_time != INT64_MAX) {
         o->stop_time = INT64_MAX;
@@ -2224,13 +2257,7 @@ static int open_output_file(OptionsContext *o, const char *filename)
 
     oc->interrupt_callback = int_cb;
 
-    e = av_dict_get(o->g->format_opts, "fflags", NULL, 0);
-    if (e) {
-        const AVOption *o = av_opt_find(oc, "fflags", NULL, 0, 0);
-        av_opt_eval_flags(oc, o, e->value, &format_flags);
-    }
     if (o->bitexact) {
-        format_flags |= AVFMT_FLAG_BITEXACT;
         oc->flags    |= AVFMT_FLAG_BITEXACT;
     }
 
@@ -2566,7 +2593,7 @@ loop_end:
                     count = 0;
                     while (ost->enc->pix_fmts[count] != AV_PIX_FMT_NONE)
                         count++;
-                    f->formats = av_mallocz_array(count + 1, sizeof(*f->formats));
+                    f->formats = av_calloc(count + 1, sizeof(*f->formats));
                     if (!f->formats)
                         exit_program(1);
                     memcpy(f->formats, ost->enc->pix_fmts, (count + 1) * sizeof(*f->formats));
@@ -2579,7 +2606,7 @@ loop_end:
                     count = 0;
                     while (ost->enc->sample_fmts[count] != AV_SAMPLE_FMT_NONE)
                         count++;
-                    f->formats = av_mallocz_array(count + 1, sizeof(*f->formats));
+                    f->formats = av_calloc(count + 1, sizeof(*f->formats));
                     if (!f->formats)
                         exit_program(1);
                     memcpy(f->formats, ost->enc->sample_fmts, (count + 1) * sizeof(*f->formats));
@@ -2590,7 +2617,7 @@ loop_end:
                     count = 0;
                     while (ost->enc->supported_samplerates[count])
                         count++;
-                    f->sample_rates = av_mallocz_array(count + 1, sizeof(*f->sample_rates));
+                    f->sample_rates = av_calloc(count + 1, sizeof(*f->sample_rates));
                     if (!f->sample_rates)
                         exit_program(1);
                     memcpy(f->sample_rates, ost->enc->supported_samplerates,
@@ -2602,7 +2629,7 @@ loop_end:
                     count = 0;
                     while (ost->enc->channel_layouts[count])
                         count++;
-                    f->channel_layouts = av_mallocz_array(count + 1, sizeof(*f->channel_layouts));
+                    f->channel_layouts = av_calloc(count + 1, sizeof(*f->channel_layouts));
                     if (!f->channel_layouts)
                         exit_program(1);
                     memcpy(f->channel_layouts, ost->enc->channel_layouts,
@@ -3600,7 +3627,7 @@ const OptionDef options[] = {
         "set profile", "profile" },
     { "filter",         HAS_ARG | OPT_STRING | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(filters) },
         "set stream filtergraph", "filter_graph" },
-    { "filter_threads",  HAS_ARG | OPT_INT,                          { &filter_nbthreads },
+    { "filter_threads", HAS_ARG,                                     { .func_arg = opt_filter_threads },
         "number of non-complex filter threads" },
     { "filter_script",  HAS_ARG | OPT_STRING | OPT_SPEC | OPT_OUTPUT, { .off = OFFSET(filter_scripts) },
         "read stream filtergraph description from a file", "filename" },
@@ -3848,7 +3875,7 @@ const OptionDef options[] = {
 #endif
 
 #if CONFIG_QSV
-    { "qsv_device", HAS_ARG | OPT_STRING | OPT_EXPERT, { &qsv_device },
+    { "qsv_device", HAS_ARG | OPT_EXPERT, { .func_arg = opt_qsv_device },
         "set QSV hardware device (DirectX adapter index, DRM path or X11 display name)", "device"},
 #endif
 

@@ -66,28 +66,7 @@ static const AVOption afftfilt_options[] = {
     { "real", "set channels real expressions",       OFFSET(real_str), AV_OPT_TYPE_STRING, {.str = "re" }, 0, 0, A },
     { "imag", "set channels imaginary expressions",  OFFSET(img_str),  AV_OPT_TYPE_STRING, {.str = "im" }, 0, 0, A },
     { "win_size", "set window size", OFFSET(fft_size), AV_OPT_TYPE_INT, {.i64=4096}, 16, 131072, A },
-    { "win_func", "set window function", OFFSET(win_func), AV_OPT_TYPE_INT, {.i64 = WFUNC_HANNING}, 0, NB_WFUNC-1, A, "win_func" },
-        { "rect",     "Rectangular",      0, AV_OPT_TYPE_CONST, {.i64=WFUNC_RECT},     0, 0, A, "win_func" },
-        { "bartlett", "Bartlett",         0, AV_OPT_TYPE_CONST, {.i64=WFUNC_BARTLETT}, 0, 0, A, "win_func" },
-        { "hann",     "Hann",             0, AV_OPT_TYPE_CONST, {.i64=WFUNC_HANNING},  0, 0, A, "win_func" },
-        { "hanning",  "Hanning",          0, AV_OPT_TYPE_CONST, {.i64=WFUNC_HANNING},  0, 0, A, "win_func" },
-        { "hamming",  "Hamming",          0, AV_OPT_TYPE_CONST, {.i64=WFUNC_HAMMING},  0, 0, A, "win_func" },
-        { "blackman", "Blackman",         0, AV_OPT_TYPE_CONST, {.i64=WFUNC_BLACKMAN}, 0, 0, A, "win_func" },
-        { "welch",    "Welch",            0, AV_OPT_TYPE_CONST, {.i64=WFUNC_WELCH},    0, 0, A, "win_func" },
-        { "flattop",  "Flat-top",         0, AV_OPT_TYPE_CONST, {.i64=WFUNC_FLATTOP},  0, 0, A, "win_func" },
-        { "bharris",  "Blackman-Harris",  0, AV_OPT_TYPE_CONST, {.i64=WFUNC_BHARRIS},  0, 0, A, "win_func" },
-        { "bnuttall", "Blackman-Nuttall", 0, AV_OPT_TYPE_CONST, {.i64=WFUNC_BNUTTALL}, 0, 0, A, "win_func" },
-        { "bhann",    "Bartlett-Hann",    0, AV_OPT_TYPE_CONST, {.i64=WFUNC_BHANN},    0, 0, A, "win_func" },
-        { "sine",     "Sine",             0, AV_OPT_TYPE_CONST, {.i64=WFUNC_SINE},     0, 0, A, "win_func" },
-        { "nuttall",  "Nuttall",          0, AV_OPT_TYPE_CONST, {.i64=WFUNC_NUTTALL},  0, 0, A, "win_func" },
-        { "lanczos",  "Lanczos",          0, AV_OPT_TYPE_CONST, {.i64=WFUNC_LANCZOS},  0, 0, A, "win_func" },
-        { "gauss",    "Gauss",            0, AV_OPT_TYPE_CONST, {.i64=WFUNC_GAUSS},    0, 0, A, "win_func" },
-        { "tukey",    "Tukey",            0, AV_OPT_TYPE_CONST, {.i64=WFUNC_TUKEY},    0, 0, A, "win_func" },
-        { "dolph",    "Dolph-Chebyshev",  0, AV_OPT_TYPE_CONST, {.i64=WFUNC_DOLPH},    0, 0, A, "win_func" },
-        { "cauchy",   "Cauchy",           0, AV_OPT_TYPE_CONST, {.i64=WFUNC_CAUCHY},   0, 0, A, "win_func" },
-        { "parzen",   "Parzen",           0, AV_OPT_TYPE_CONST, {.i64=WFUNC_PARZEN},   0, 0, A, "win_func" },
-        { "poisson",  "Poisson",          0, AV_OPT_TYPE_CONST, {.i64=WFUNC_POISSON},  0, 0, A, "win_func" },
-        { "bohman",   "Bohman",           0, AV_OPT_TYPE_CONST, {.i64=WFUNC_BOHMAN},   0, 0, A, "win_func" },
+    WIN_FUNC_OPTION("win_func", OFFSET(win_func), A, WFUNC_HANNING),
     { "overlap", "set window overlap", OFFSET(overlap), AV_OPT_TYPE_FLOAT, {.dbl=0.75}, 0,  1, A },
     { NULL },
 };
@@ -298,18 +277,25 @@ static int filter_frame(AVFilterLink *inlink)
         int x;
         values[VAR_CHANNEL] = ch;
 
-        for (n = 0; n <= window_size / 2; n++) {
-            float fr, fi;
+        if (ctx->is_disabled) {
+            for (n = 0; n <= window_size / 2; n++) {
+                fft_temp[n].re = fft_out[n].re;
+                fft_temp[n].im = fft_out[n].im;
+            }
+        } else {
+            for (n = 0; n <= window_size / 2; n++) {
+                float fr, fi;
 
-            values[VAR_BIN] = n;
-            values[VAR_REAL] = fft_out[n].re;
-            values[VAR_IMAG] = fft_out[n].im;
+                values[VAR_BIN] = n;
+                values[VAR_REAL] = fft_out[n].re;
+                values[VAR_IMAG] = fft_out[n].im;
 
-            fr = av_expr_eval(s->real[ch], values, s);
-            fi = av_expr_eval(s->imag[ch], values, s);
+                fr = av_expr_eval(s->real[ch], values, s);
+                fi = av_expr_eval(s->imag[ch], values, s);
 
-            fft_temp[n].re = fr;
-            fft_temp[n].im = fi;
+                fft_temp[n].re = fr;
+                fft_temp[n].im = fi;
+            }
         }
 
         for (n = window_size / 2 + 1, x = window_size / 2 - 1; n < window_size; n++, x--) {
@@ -410,36 +396,6 @@ static int activate(AVFilterContext *ctx)
     return FFERROR_NOT_READY;
 }
 
-static int query_formats(AVFilterContext *ctx)
-{
-    AVFilterFormats *formats;
-    AVFilterChannelLayouts *layouts;
-    static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_FLTP,
-        AV_SAMPLE_FMT_NONE
-    };
-    int ret;
-
-    layouts = ff_all_channel_counts();
-    if (!layouts)
-        return AVERROR(ENOMEM);
-    ret = ff_set_common_channel_layouts(ctx, layouts);
-    if (ret < 0)
-        return ret;
-
-    formats = ff_make_format_list(sample_fmts);
-    if (!formats)
-        return AVERROR(ENOMEM);
-    ret = ff_set_common_formats(ctx, formats);
-    if (ret < 0)
-        return ret;
-
-    formats = ff_all_samplerates();
-    if (!formats)
-        return AVERROR(ENOMEM);
-    return ff_set_common_samplerates(ctx, formats);
-}
-
 static av_cold void uninit(AVFilterContext *ctx)
 {
     AFFTFiltContext *s = ctx->priv;
@@ -479,7 +435,6 @@ static const AVFilterPad inputs[] = {
         .type         = AVMEDIA_TYPE_AUDIO,
         .config_props = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad outputs[] = {
@@ -487,7 +442,6 @@ static const AVFilterPad outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_AUDIO,
     },
-    { NULL }
 };
 
 const AVFilter ff_af_afftfilt = {
@@ -495,9 +449,10 @@ const AVFilter ff_af_afftfilt = {
     .description     = NULL_IF_CONFIG_SMALL("Apply arbitrary expressions to samples in frequency domain."),
     .priv_size       = sizeof(AFFTFiltContext),
     .priv_class      = &afftfilt_class,
-    .inputs          = inputs,
-    .outputs         = outputs,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
+    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_FLTP),
     .activate        = activate,
-    .query_formats   = query_formats,
     .uninit          = uninit,
+    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL,
 };

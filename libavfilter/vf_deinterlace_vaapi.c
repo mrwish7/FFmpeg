@@ -369,7 +369,6 @@ static const AVFilterPad deint_vaapi_inputs[] = {
         .filter_frame = &deint_vaapi_filter_frame,
         .config_props = &ff_vaapi_vpp_config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad deint_vaapi_outputs[] = {
@@ -378,7 +377,6 @@ static const AVFilterPad deint_vaapi_outputs[] = {
         .type = AVMEDIA_TYPE_VIDEO,
         .config_props = &deint_vaapi_config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_deinterlace_vaapi = {
@@ -387,9 +385,9 @@ const AVFilter ff_vf_deinterlace_vaapi = {
     .priv_size      = sizeof(DeintVAAPIContext),
     .init           = &deint_vaapi_init,
     .uninit         = &ff_vaapi_vpp_ctx_uninit,
-    .query_formats  = &ff_vaapi_vpp_query_formats,
-    .inputs         = deint_vaapi_inputs,
-    .outputs        = deint_vaapi_outputs,
+    FILTER_INPUTS(deint_vaapi_inputs),
+    FILTER_OUTPUTS(deint_vaapi_outputs),
+    FILTER_QUERY_FUNC(&ff_vaapi_vpp_query_formats),
     .priv_class     = &deint_vaapi_class,
     .flags_internal = FF_FILTER_FLAG_HWFRAME_AWARE,
 };

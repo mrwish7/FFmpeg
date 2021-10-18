@@ -32,6 +32,7 @@
 #include "internal.h"
 #include "packet_internal.h"
 #include "atsc_a53.h"
+#include "sei.h"
 
 #if defined(_MSC_VER)
 #define X264_API_IMPORTS 1
@@ -114,6 +115,9 @@ typedef struct X264Context {
      * encounter a frame with ROI side data.
      */
     int roi_warned;
+
+    void *sei_data;
+    int sei_data_size;
 } X264Context;
 
 static void X264_log(void *p, int level, const char *fmt, va_list args)
@@ -317,6 +321,9 @@ static int X264_frame(AVCodecContext *ctx, AVPacket *pkt, const AVFrame *frame,
     x4->pic.img.i_plane = avfmt2_num_planes(ctx->pix_fmt);
 
     if (frame) {
+        x264_sei_t *sei = &x4->pic.extra_sei;
+        sei->num_payloads = 0;
+
         for (i = 0; i < x4->pic.img.i_plane; i++) {
             x4->pic.img.plane[i]    = frame->data[i];
             x4->pic.img.i_stride[i] = frame->linesize[i];
@@ -397,7 +404,7 @@ static int X264_frame(AVCodecContext *ctx, AVPacket *pkt, const AVFrame *frame,
                     }
                     nb_rois = sd->size / roi_size;
 
-                    qoffsets = av_mallocz_array(mbx * mby, sizeof(*qoffsets));
+                    qoffsets = av_calloc(mbx * mby, sizeof(*qoffsets));
                     if (!qoffsets)
                         return AVERROR(ENOMEM);
 
@@ -438,6 +445,27 @@ static int X264_frame(AVCodecContext *ctx, AVPacket *pkt, const AVFrame *frame,
                     }
                 }
             }
+        }
+
+        for (int j = 0; j < frame->nb_side_data; j++) {
+            AVFrameSideData *side_data = frame->side_data[j];
+            void *tmp;
+            x264_sei_payload_t *sei_payload;
+            if (side_data->type != AV_FRAME_DATA_SEI_UNREGISTERED)
+                continue;
+            tmp = av_fast_realloc(x4->sei_data, &x4->sei_data_size, (sei->num_payloads + 1) * sizeof(*sei_payload));
+            if (!tmp) {
+                av_freep(&x4->pic.extra_sei.payloads);
+                av_freep(&x4->pic.prop.quant_offsets);
+                return AVERROR(ENOMEM);
+            }
+            x4->sei_data = tmp;
+            sei->payloads = x4->sei_data;
+            sei_payload = &sei->payloads[sei->num_payloads];
+            sei_payload->payload = side_data->data;
+            sei_payload->payload_size = side_data->size;
+            sei_payload->payload_type = SEI_TYPE_USER_DATA_UNREGISTERED;
+            sei->num_payloads++;
         }
     }
 
@@ -504,6 +532,8 @@ static av_cold int X264_close(AVCodecContext *avctx)
 #if X264_BUILD >= 161
     x264_param_cleanup(&x4->params);
 #endif
+
+    av_freep(&x4->sei_data);
 
     if (x4->enc) {
         x264_encoder_close(x4->enc);
@@ -857,10 +887,12 @@ static av_cold int X264_init(AVCodecContext *avctx)
 
     x4->params.i_slice_count  = avctx->slices;
 
-    x4->params.vui.b_fullrange = avctx->pix_fmt == AV_PIX_FMT_YUVJ420P ||
-                                 avctx->pix_fmt == AV_PIX_FMT_YUVJ422P ||
-                                 avctx->pix_fmt == AV_PIX_FMT_YUVJ444P ||
-                                 avctx->color_range == AVCOL_RANGE_JPEG;
+    if (avctx->color_range != AVCOL_RANGE_UNSPECIFIED)
+        x4->params.vui.b_fullrange = avctx->color_range == AVCOL_RANGE_JPEG;
+    else if (avctx->pix_fmt == AV_PIX_FMT_YUVJ420P ||
+             avctx->pix_fmt == AV_PIX_FMT_YUVJ422P ||
+             avctx->pix_fmt == AV_PIX_FMT_YUVJ444P)
+        x4->params.vui.b_fullrange = 1;
 
     if (avctx->colorspace != AVCOL_SPC_UNSPECIFIED)
         x4->params.vui.i_colmatrix = avctx->colorspace;
@@ -868,6 +900,8 @@ static av_cold int X264_init(AVCodecContext *avctx)
         x4->params.vui.i_colorprim = avctx->color_primaries;
     if (avctx->color_trc != AVCOL_TRC_UNSPECIFIED)
         x4->params.vui.i_transfer  = avctx->color_trc;
+    if (avctx->chroma_sample_location != AVCHROMA_LOC_UNSPECIFIED)
+        x4->params.vui.i_chroma_loc = avctx->chroma_sample_location - 1;
 
     if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER)
         x4->params.b_repeat_headers = 0;

@@ -461,35 +461,6 @@ static const AVOption afwtdn_options[] = {
 
 AVFILTER_DEFINE_CLASS(afwtdn);
 
-static int query_formats(AVFilterContext *ctx)
-{
-    AVFilterFormats *formats = NULL;
-    AVFilterChannelLayouts *layouts = NULL;
-    static const enum AVSampleFormat sample_fmts[] = {
-        AV_SAMPLE_FMT_DBLP,
-        AV_SAMPLE_FMT_NONE
-    };
-    int ret;
-
-    formats = ff_make_format_list(sample_fmts);
-    if (!formats)
-        return AVERROR(ENOMEM);
-    ret = ff_set_common_formats(ctx, formats);
-    if (ret < 0)
-        return ret;
-
-    layouts = ff_all_channel_counts();
-    if (!layouts)
-        return AVERROR(ENOMEM);
-
-    ret = ff_set_common_channel_layouts(ctx, layouts);
-    if (ret < 0)
-        return ret;
-
-    formats = ff_all_samplerates();
-    return ff_set_common_samplerates(ctx, formats);
-}
-
 #define pow2(x) (1U << (x))
 #define mod_pow2(x, power_of_two) ((x) & ((power_of_two) - 1))
 
@@ -1010,6 +981,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int ch, int nb_jobs)
     is_noise *= in->sample_rate;
     is_noise /= s->nb_samples;
     for (int level = 0; level <= s->levels; level++) {
+        const double percent = ctx->is_disabled ? 0. : s->percent;
         const int length = cp->output_length[level];
         const double scale = sqrt(2.0 * log(length));
 
@@ -1020,7 +992,7 @@ static int filter_channel(AVFilterContext *ctx, void *arg, int ch, int nb_jobs)
 
         noise_filter(stddev[level], cp->output_coefs[level], filter, absmean[level],
                      s->softness, new_stddev[level], length);
-        denoise_level(cp->filter_coefs[level], cp->output_coefs[level], filter, s->percent, length);
+        denoise_level(cp->filter_coefs[level], cp->output_coefs[level], filter, percent, length);
     }
 
     ret = inverse(s, cp->filter_coefs, cp->filter_length, dst, out->nb_samples, ch, s->sn);
@@ -1072,7 +1044,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     td.in  = in;
     td.out = out;
-    ctx->internal->execute(ctx, s->filter_channel, &td, NULL, inlink->channels);
+    ff_filter_execute(ctx, s->filter_channel, &td, NULL, inlink->channels);
     if (s->need_profile)
         s->got_profile = 1;
 
@@ -1323,7 +1295,6 @@ static const AVFilterPad inputs[] = {
         .name         = "default",
         .type         = AVMEDIA_TYPE_AUDIO,
     },
-    { NULL }
 };
 
 static const AVFilterPad outputs[] = {
@@ -1332,19 +1303,19 @@ static const AVFilterPad outputs[] = {
         .type          = AVMEDIA_TYPE_AUDIO,
         .config_props  = config_output,
     },
-    { NULL }
 };
 
 const AVFilter ff_af_afwtdn = {
     .name            = "afwtdn",
     .description     = NULL_IF_CONFIG_SMALL("Denoise audio stream using Wavelets."),
-    .query_formats   = query_formats,
     .priv_size       = sizeof(AudioFWTDNContext),
     .priv_class      = &afwtdn_class,
     .activate        = activate,
     .uninit          = uninit,
-    .inputs          = inputs,
-    .outputs         = outputs,
+    FILTER_INPUTS(inputs),
+    FILTER_OUTPUTS(outputs),
+    FILTER_SINGLE_SAMPLEFMT(AV_SAMPLE_FMT_DBLP),
     .process_command = process_command,
-    .flags           = AVFILTER_FLAG_SLICE_THREADS,
+    .flags           = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL |
+                       AVFILTER_FLAG_SLICE_THREADS,
 };

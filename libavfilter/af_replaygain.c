@@ -592,7 +592,6 @@ static const AVFilterPad replaygain_inputs[] = {
         .filter_frame = filter_frame,
         .config_props = config_input,
     },
-    { NULL }
 };
 
 static const AVFilterPad replaygain_outputs[] = {
@@ -600,15 +599,14 @@ static const AVFilterPad replaygain_outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_AUDIO,
     },
-    { NULL }
 };
 
 const AVFilter ff_af_replaygain = {
     .name          = "replaygain",
     .description   = NULL_IF_CONFIG_SMALL("ReplayGain scanner."),
-    .query_formats = query_formats,
     .uninit        = uninit,
     .priv_size     = sizeof(ReplayGainContext),
-    .inputs        = replaygain_inputs,
-    .outputs       = replaygain_outputs,
+    FILTER_INPUTS(replaygain_inputs),
+    FILTER_OUTPUTS(replaygain_outputs),
+    FILTER_QUERY_FUNC(query_formats),
 };

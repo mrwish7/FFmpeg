@@ -876,7 +876,7 @@ static int create_cv_pixel_buffer_info(AVCodecContext* avctx,
     width_num = CFNumberCreate(kCFAllocatorDefault,
                                kCFNumberSInt32Type,
                                &avctx->width);
-    if (!width_num) return AVERROR(ENOMEM);
+    if (!width_num) goto pbinfo_nomem;
 
     CFDictionarySetValue(pixel_buffer_info,
                          kCVPixelBufferWidthKey,
@@ -1398,7 +1398,6 @@ static int vtenc_configure_encoder(AVCodecContext *avctx)
     }
 
     vtctx->codec_id = avctx->codec_id;
-    avctx->max_b_frames = 16;
 
     if (vtctx->codec_id == AV_CODEC_ID_H264) {
         vtctx->get_param_set_func = CMVideoFormatDescriptionGetH264ParameterSetAtIndex;
@@ -1517,7 +1516,10 @@ static av_cold int vtenc_init(AVCodecContext *avctx)
     if (!status && has_b_frames_cfbool) {
         //Some devices don't output B-frames for main profile, even if requested.
         // HEVC has b-pyramid
-        vtctx->has_b_frames = (CFBooleanGetValue(has_b_frames_cfbool) && avctx->codec_id == AV_CODEC_ID_HEVC) ? 2 : 1;
+        if (CFBooleanGetValue(has_b_frames_cfbool))
+            vtctx->has_b_frames = avctx->codec_id == AV_CODEC_ID_HEVC ? 2 : 1;
+        else
+            vtctx->has_b_frames = 0;
         CFRelease(has_b_frames_cfbool);
     }
     avctx->has_b_frames = vtctx->has_b_frames;

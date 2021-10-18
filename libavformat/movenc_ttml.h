@@ -1,4 +1,7 @@
 /*
+ * MP4, ISMV Muxer TTML helpers
+ * Copyright (c) 2021 24i
+ *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -16,22 +19,13 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libavcodec/avcodec.h"
+#ifndef AVFORMAT_MOVENC_TTML_H
+#define AVFORMAT_MOVENC_TTML_H
 
-int main(void){
-    void *iter = NULL;
-    const AVCodec *codec = NULL;
-    int ret = 0;
+#include "avformat.h"
+#include "movenc.h"
 
-    while (codec = av_codec_iterate(&iter)) {
-        if (av_codec_is_encoder(codec)) {
-            if (codec->type == AVMEDIA_TYPE_AUDIO) {
-                if (!codec->sample_fmts) {
-                    av_log(NULL, AV_LOG_FATAL, "Encoder %s is missing the sample_fmts field\n", codec->name);
-                    ret = 1;
-                }
-            }
-        }
-    }
-    return ret;
-}
+int ff_mov_generate_squashed_ttml_packet(AVFormatContext *s,
+                                         MOVTrack *track, AVPacket *pkt);
+
+#endif /* AVFORMAT_MOVENC_TTML_H */

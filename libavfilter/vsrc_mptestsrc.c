@@ -290,18 +290,6 @@ static int config_props(AVFilterLink *outlink)
     return 0;
 }
 
-static int query_formats(AVFilterContext *ctx)
-{
-    static const enum AVPixelFormat pix_fmts[] = {
-        AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE
-    };
-
-    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
-    if (!fmts_list)
-        return AVERROR(ENOMEM);
-    return ff_set_common_formats(ctx, fmts_list);
-}
-
 static int request_frame(AVFilterLink *outlink)
 {
     MPTestContext *test = outlink->src->priv;
@@ -354,7 +342,6 @@ static const AVFilterPad mptestsrc_outputs[] = {
         .request_frame = request_frame,
         .config_props  = config_props,
     },
-    { NULL }
 };
 
 const AVFilter ff_vsrc_mptestsrc = {
@@ -363,7 +350,7 @@ const AVFilter ff_vsrc_mptestsrc = {
     .priv_size     = sizeof(MPTestContext),
     .priv_class    = &mptestsrc_class,
     .init          = init,
-    .query_formats = query_formats,
     .inputs        = NULL,
-    .outputs       = mptestsrc_outputs,
+    FILTER_OUTPUTS(mptestsrc_outputs),
+    FILTER_SINGLE_PIXFMT(AV_PIX_FMT_YUV420P),
 };

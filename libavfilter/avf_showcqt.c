@@ -1577,7 +1577,6 @@ static const AVFilterPad showcqt_inputs[] = {
         .type         = AVMEDIA_TYPE_AUDIO,
         .filter_frame = filter_frame,
     },
-    { NULL }
 };
 
 static const AVFilterPad showcqt_outputs[] = {
@@ -1587,7 +1586,6 @@ static const AVFilterPad showcqt_outputs[] = {
         .config_props  = config_output,
         .request_frame = request_frame,
     },
-    { NULL }
 };
 
 const AVFilter ff_avf_showcqt = {
@@ -1595,9 +1593,9 @@ const AVFilter ff_avf_showcqt = {
     .description   = NULL_IF_CONFIG_SMALL("Convert input audio to a CQT (Constant/Clamped Q Transform) spectrum video output."),
     .init          = init,
     .uninit        = uninit,
-    .query_formats = query_formats,
     .priv_size     = sizeof(ShowCQTContext),
-    .inputs        = showcqt_inputs,
-    .outputs       = showcqt_outputs,
+    FILTER_INPUTS(showcqt_inputs),
+    FILTER_OUTPUTS(showcqt_outputs),
+    FILTER_QUERY_FUNC(query_formats),
     .priv_class    = &showcqt_class,
 };

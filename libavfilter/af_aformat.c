@@ -146,7 +146,6 @@ static const AVFilterPad avfilter_af_aformat_inputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_AUDIO,
     },
-    { NULL }
 };
 
 static const AVFilterPad avfilter_af_aformat_outputs[] = {
@@ -154,7 +153,6 @@ static const AVFilterPad avfilter_af_aformat_outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_AUDIO
     },
-    { NULL }
 };
 
 const AVFilter ff_af_aformat = {
@@ -162,9 +160,9 @@ const AVFilter ff_af_aformat = {
     .description   = NULL_IF_CONFIG_SMALL("Convert the input audio to one of the specified formats."),
     .init          = init,
     .uninit        = uninit,
-    .query_formats = query_formats,
     .priv_size     = sizeof(AFormatContext),
     .priv_class    = &aformat_class,
-    .inputs        = avfilter_af_aformat_inputs,
-    .outputs       = avfilter_af_aformat_outputs,
+    FILTER_INPUTS(avfilter_af_aformat_inputs),
+    FILTER_OUTPUTS(avfilter_af_aformat_outputs),
+    FILTER_QUERY_FUNC(query_formats),
 };

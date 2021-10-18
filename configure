@@ -1446,9 +1446,11 @@ test_pkg_config(){
     test_cmd $pkg_config --exists --print-errors $pkg_version || return
     pkg_cflags=$($pkg_config --cflags $pkg_config_flags $pkg)
     pkg_libs=$($pkg_config --libs $pkg_config_flags $pkg)
+    pkg_incdir=$($pkg_config --variable=includedir $pkg_config_flags $pkg)
     check_func_headers "$headers" "$funcs" $pkg_cflags $pkg_libs "$@" &&
         enable $name &&
         set_sanitized "${name}_cflags"    $pkg_cflags &&
+        set_sanitized "${name}_incdir"    $pkg_incdir &&
         set_sanitized "${name}_extralibs" $pkg_libs
 }
 
@@ -1466,7 +1468,8 @@ test_pkg_config_cpp(){
     pkg_incdir=$($pkg_config --variable=includedir $pkg_config_flags $pkg)
     test_cpp_condition "$pkg_incdir/$headers" "$cond" "$@" &&
         enable $name &&
-        set_sanitized "${name}_cflags" $pkg_cflags
+        set_sanitized "${name}_cflags" $pkg_cflags &&
+        set_sanitized "${name}_incdir" $pkg_incdir
 }
 
 check_pkg_config(){
@@ -1766,7 +1769,6 @@ EXTERNAL_LIBRARY_GPL_LIST="
 EXTERNAL_LIBRARY_NONFREE_LIST="
     decklink
     libfdk_aac
-    openssl
     libtls
 "
 
@@ -1858,6 +1860,7 @@ EXTERNAL_LIBRARY_LIST="
     mediacodec
     openal
     opengl
+    openssl
     pocketsphinx
     vapoursynth
 "
@@ -3095,6 +3098,7 @@ thumbnail_cuda_filter_deps_any="cuda_nvcc cuda_llvm"
 transpose_npp_filter_deps="ffnvcodec libnpp"
 overlay_cuda_filter_deps="ffnvcodec"
 overlay_cuda_filter_deps_any="cuda_nvcc cuda_llvm"
+sharpen_npp_filter_deps="ffnvcodec libnpp"
 
 amf_deps_any="libdl LoadLibrary"
 nvenc_deps="ffnvcodec"
@@ -3389,6 +3393,7 @@ mxf_opatom_muxer_select="mxf_muxer"
 nut_muxer_select="riffenc"
 nuv_demuxer_select="riffdec"
 obu_demuxer_select="av1_frame_merge_bsf av1_parser"
+obu_muxer_select="av1_metadata_bsf"
 oga_muxer_select="ogg_muxer"
 ogg_demuxer_select="dirac_parse"
 ogv_muxer_select="ogg_muxer"
@@ -3548,7 +3553,6 @@ afir_filter_select="rdft"
 ametadata_filter_deps="avformat"
 amovie_filter_deps="avcodec avformat"
 aresample_filter_deps="swresample"
-asoftclip_filter_deps="swresample"
 asr_filter_deps="pocketsphinx"
 ass_filter_deps="libass"
 atempo_filter_deps="avcodec"
@@ -3566,16 +3570,12 @@ chromaber_vulkan_filter_deps="vulkan_lib libglslang"
 colorkey_opencl_filter_deps="opencl"
 colormatrix_filter_deps="gpl"
 convolution_opencl_filter_deps="opencl"
-convolve_filter_deps="avcodec"
-convolve_filter_select="fft"
 coreimage_filter_deps="coreimage appkit"
 coreimage_filter_extralibs="-framework OpenGL"
 coreimagesrc_filter_deps="coreimage appkit"
 coreimagesrc_filter_extralibs="-framework OpenGL"
 cover_rect_filter_deps="avcodec avformat gpl"
 cropdetect_filter_deps="gpl"
-deconvolve_filter_deps="avcodec"
-deconvolve_filter_select="fft"
 deinterlace_qsv_filter_deps="libmfx"
 deinterlace_vaapi_filter_deps="vaapi"
 delogo_filter_deps="gpl"
@@ -3602,8 +3602,9 @@ firequalizer_filter_select="rdft"
 flite_filter_deps="libflite"
 framerate_filter_select="scene_sad"
 freezedetect_filter_select="scene_sad"
-frei0r_filter_deps="frei0r libdl"
-frei0r_src_filter_deps="frei0r libdl"
+frei0r_deps_any="libdl LoadLibrary"
+frei0r_filter_deps="frei0r"
+frei0r_src_filter_deps="frei0r"
 fspp_filter_deps="gpl"
 histeq_filter_deps="gpl"
 hqdn3d_filter_deps="gpl"
@@ -3730,7 +3731,6 @@ cws2fws_extralibs="zlib_extralibs"
 # libraries, in any order
 avcodec_deps="avutil"
 avcodec_suggest="libm"
-avcodec_select="null_bsf"
 avdevice_deps="avformat avcodec avutil"
 avdevice_suggest="libm"
 avfilter_deps="avutil"
@@ -5014,9 +5014,11 @@ elif enabled arm; then
         fi
     }
 
-    [ "$cpu" = generic ] && cpu=$(probe_arm_arch)
 
     case $cpu in
+        generic)
+            subarch=$(probe_arm_arch | sed 's/[^a-z0-9]//g')
+        ;;
         armv*)
             cpuflags="-march=$cpu"
             subarch=$(echo $cpu | sed 's/[^a-z0-9]//g')
@@ -5948,7 +5950,7 @@ elif enabled mips; then
     enabled loongson3 && check_inline_asm loongson3 '"gsldxc1 $f0, 0($2, $3)"' '-mloongson-ext' && append MMIFLAGS '-mloongson-ext'
 
     # MMI can be detected at runtime too
-    enabled mmi && check_inline_asm mmi '"punpcklhw $f0, $f0, $f0"' '-mloongson-mmi' && append MMIFLAGS '-mloongson-mmi'
+    enabled mmi && check_inline_asm mmi '"pxor $f0, $f0, $f0"' '-mloongson-mmi' && append MMIFLAGS '-mloongson-mmi'
 
     if enabled bigendian && enabled msa; then
         disable msa
@@ -6388,8 +6390,8 @@ enabled avisynth          && require_headers "avisynth/avisynth_c.h"
 enabled cuda_nvcc         && { check_nvcc cuda_nvcc || die "ERROR: failed checking for nvcc."; }
 enabled chromaprint       && require chromaprint chromaprint.h chromaprint_get_version -lchromaprint
 enabled decklink          && { require_headers DeckLinkAPI.h &&
-                               { test_cpp_condition DeckLinkAPIVersion.h "BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a0a0000" || die "ERROR: Decklink API version must be >= 10.10"; } }
-enabled frei0r            && require_headers "frei0r.h dlfcn.h"
+                               { test_cpp_condition DeckLinkAPIVersion.h "BLACKMAGIC_DECKLINK_API_VERSION >= 0x0a0b0000" || die "ERROR: Decklink API version must be >= 10.11"; } }
+enabled frei0r            && require_headers "frei0r.h"
 enabled gmp               && require gmp gmp.h mpz_export -lgmp
 enabled gnutls            && require_pkg_config gnutls gnutls gnutls/gnutls.h gnutls_global_init
 enabled jni               && { [ $target_os = "android" ] && check_headers jni.h && enabled pthreads || die "ERROR: jni not found"; }
@@ -6447,8 +6449,8 @@ enabled libmodplug        && require_pkg_config libmodplug libmodplug libmodplug
 enabled libmp3lame        && require "libmp3lame >= 3.98.3" lame/lame.h lame_set_VBR_quality -lmp3lame $libm_extralibs
 enabled libmysofa         && { check_pkg_config libmysofa libmysofa mysofa.h mysofa_neighborhood_init_withstepdefine ||
                                require libmysofa mysofa.h mysofa_neighborhood_init_withstepdefine -lmysofa $zlib_extralibs; }
-enabled libnpp            && { check_lib libnpp npp.h nppGetLibVersion -lnppig -lnppicc -lnppc -lnppidei ||
-                               check_lib libnpp npp.h nppGetLibVersion -lnppi -lnppc -lnppidei ||
+enabled libnpp            && { check_lib libnpp npp.h nppGetLibVersion -lnppig -lnppicc -lnppc -lnppidei -lnppif ||
+                               check_lib libnpp npp.h nppGetLibVersion -lnppi -lnppif -lnppc -lnppidei ||
                                die "ERROR: libnpp not found"; }
 enabled libopencore_amrnb && require libopencore_amrnb opencore-amrnb/interf_dec.h Decoder_Interface_init -lopencore-amrnb
 enabled libopencore_amrwb && require libopencore_amrwb opencore-amrwb/dec_if.h D_IF_init -lopencore-amrwb
@@ -6578,7 +6580,10 @@ enabled omx_rpi           && { test_code cc OMX_Core.h OMX_IndexConfigBrcmVideoR
                                die "ERROR: OpenMAX IL headers from raspberrypi/firmware not found"; } &&
                              enable omx
 enabled omx               && require_headers OMX_Core.h
-enabled openssl           && { check_pkg_config openssl openssl openssl/ssl.h OPENSSL_init_ssl ||
+enabled openssl           && { { check_pkg_config openssl "openssl >= 3.0.0" openssl/ssl.h OPENSSL_init_ssl &&
+                                 { enabled gplv3 || ! enabled gpl || enabled nonfree || die "ERROR: OpenSSL >=3.0.0 requires --enable-version3"; }; } ||
+                               { enabled gpl && ! enabled nonfree && die "ERROR: OpenSSL <3.0.0 is incompatible with the gpl"; } ||
+                               check_pkg_config openssl openssl openssl/ssl.h OPENSSL_init_ssl ||
                                check_pkg_config openssl openssl openssl/ssl.h SSL_library_init ||
                                check_lib openssl openssl/ssl.h OPENSSL_init_ssl -lssl -lcrypto ||
                                check_lib openssl openssl/ssl.h SSL_library_init -lssl -lcrypto ||
@@ -7259,8 +7264,6 @@ enabled aresample_filter    && prepend avfilter_deps "swresample"
 enabled atempo_filter       && prepend avfilter_deps "avcodec"
 enabled bm3d_filter         && prepend avfilter_deps "avcodec"
 enabled cover_rect_filter   && prepend avfilter_deps "avformat avcodec"
-enabled convolve_filter     && prepend avfilter_deps "avcodec"
-enabled deconvolve_filter   && prepend avfilter_deps "avcodec"
 enabled ebur128_filter && enabled swresample && prepend avfilter_deps "swresample"
 enabled elbg_filter         && prepend avfilter_deps "avcodec"
 enabled fftfilt_filter      && prepend avfilter_deps "avcodec"

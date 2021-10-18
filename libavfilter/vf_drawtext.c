@@ -1615,11 +1615,10 @@ static const AVFilterPad avfilter_vf_drawtext_inputs[] = {
     {
         .name           = "default",
         .type           = AVMEDIA_TYPE_VIDEO,
+        .flags          = AVFILTERPAD_FLAG_NEEDS_WRITABLE,
         .filter_frame   = filter_frame,
         .config_props   = config_input,
-        .needs_writable = 1,
     },
-    { NULL }
 };
 
 static const AVFilterPad avfilter_vf_drawtext_outputs[] = {
@@ -1627,7 +1626,6 @@ static const AVFilterPad avfilter_vf_drawtext_outputs[] = {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
     },
-    { NULL }
 };
 
 const AVFilter ff_vf_drawtext = {
@@ -1637,9 +1635,9 @@ const AVFilter ff_vf_drawtext = {
     .priv_class    = &drawtext_class,
     .init          = init,
     .uninit        = uninit,
-    .query_formats = query_formats,
-    .inputs        = avfilter_vf_drawtext_inputs,
-    .outputs       = avfilter_vf_drawtext_outputs,
+    FILTER_INPUTS(avfilter_vf_drawtext_inputs),
+    FILTER_OUTPUTS(avfilter_vf_drawtext_outputs),
+    FILTER_QUERY_FUNC(query_formats),
     .process_command = command,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC,
 };

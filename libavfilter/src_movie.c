@@ -306,10 +306,8 @@ static av_cold int movie_common_init(AVFilterContext *ctx)
             return AVERROR(ENOMEM);
         pad.config_props  = movie_config_output_props;
         pad.request_frame = movie_request_frame;
-        if ((ret = ff_insert_outpad(ctx, i, &pad)) < 0) {
-            av_freep(&pad.name);
+        if ((ret = ff_append_outpad_free_name(ctx, &pad)) < 0)
             return ret;
-        }
         if ( movie->st[i].st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
             !movie->st[i].st->codecpar->channel_layout) {
             ret = guess_channel_layout(&movie->st[i], i, ctx);
@@ -334,7 +332,6 @@ static av_cold void movie_uninit(AVFilterContext *ctx)
     int i;
 
     for (i = 0; i < ctx->nb_outputs; i++) {
-        av_freep(&ctx->output_pads[i].name);
         if (movie->st[i].st)
             avcodec_free_context(&movie->st[i].codec_ctx);
     }
@@ -633,9 +630,9 @@ static int process_command(AVFilterContext *ctx, const char *cmd, const char *ar
     return ret;
 }
 
-#if CONFIG_MOVIE_FILTER
+AVFILTER_DEFINE_CLASS_EXT(movie, "(a)movie", movie_options);
 
-AVFILTER_DEFINE_CLASS(movie);
+#if CONFIG_MOVIE_FILTER
 
 const AVFilter ff_avsrc_movie = {
     .name          = "movie",
@@ -644,7 +641,7 @@ const AVFilter ff_avsrc_movie = {
     .priv_class    = &movie_class,
     .init          = movie_common_init,
     .uninit        = movie_uninit,
-    .query_formats = movie_query_formats,
+    FILTER_QUERY_FUNC(movie_query_formats),
 
     .inputs    = NULL,
     .outputs   = NULL,
@@ -656,20 +653,17 @@ const AVFilter ff_avsrc_movie = {
 
 #if CONFIG_AMOVIE_FILTER
 
-#define amovie_options movie_options
-AVFILTER_DEFINE_CLASS(amovie);
-
 const AVFilter ff_avsrc_amovie = {
     .name          = "amovie",
     .description   = NULL_IF_CONFIG_SMALL("Read audio from a movie source."),
+    .priv_class    = &movie_class,
     .priv_size     = sizeof(MovieContext),
     .init          = movie_common_init,
     .uninit        = movie_uninit,
-    .query_formats = movie_query_formats,
+    FILTER_QUERY_FUNC(movie_query_formats),
 
     .inputs     = NULL,
     .outputs    = NULL,
-    .priv_class = &amovie_class,
     .flags      = AVFILTER_FLAG_DYNAMIC_OUTPUTS,
     .process_command = process_command,
 };

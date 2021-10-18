@@ -618,7 +618,7 @@ static AVStream * new_stream(AVFormatContext *s, AVStream *st, int sid, int code
         st->priv_data = wst;
     }
     st->codecpar->codec_type = codec_type;
-    st->internal->need_parsing      = AVSTREAM_PARSE_FULL;
+    ffstream(st)->need_parsing = AVSTREAM_PARSE_FULL;
     avpriv_set_pts_info(st, 64, 1, 10000000);
     return st;
 }
@@ -652,6 +652,8 @@ static AVStream * parse_media_type(AVFormatContext *s, AVStream *st, int sid,
         avio_skip(pb, size - 32);
         ff_get_guid(pb, &actual_subtype);
         ff_get_guid(pb, &actual_formattype);
+        if (avio_feof(pb))
+            return NULL;
         avio_seek(pb, -size, SEEK_CUR);
 
         st = parse_media_type(s, st, sid, mediatype, actual_subtype, actual_formattype, size - 32);

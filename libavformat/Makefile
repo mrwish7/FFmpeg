@@ -8,6 +8,7 @@ HEADERS = avformat.h                                                    \
 OBJS = allformats.o         \
        avio.o               \
        aviobuf.o            \
+       demux.o              \
        dump.o               \
        format.o             \
        id3v1.o              \
@@ -19,6 +20,7 @@ OBJS = allformats.o         \
        protocols.o          \
        riff.o               \
        sdp.o                \
+       seek.o               \
        url.o                \
        utils.o              \
 
@@ -238,7 +240,7 @@ OBJS-$(CONFIG_HCOM_DEMUXER)              += hcom.o pcm.o
 OBJS-$(CONFIG_HDS_MUXER)                 += hdsenc.o
 OBJS-$(CONFIG_HEVC_DEMUXER)              += hevcdec.o rawdec.o
 OBJS-$(CONFIG_HEVC_MUXER)                += rawenc.o
-OBJS-$(CONFIG_HLS_DEMUXER)               += hls.o
+OBJS-$(CONFIG_HLS_DEMUXER)               += hls.o hls_sample_encryption.o
 OBJS-$(CONFIG_HLS_MUXER)                 += hlsenc.o hlsplaylist.o avc.o
 OBJS-$(CONFIG_HNM_DEMUXER)               += hnm.o
 OBJS-$(CONFIG_ICO_DEMUXER)               += icodec.o
@@ -337,7 +339,7 @@ OBJS-$(CONFIG_MOV_DEMUXER)               += mov.o mov_chan.o mov_esds.o \
                                             qtpalette.o replaygain.o
 OBJS-$(CONFIG_MOV_MUXER)                 += movenc.o av1.o avc.o hevc.o vpcc.o \
                                             movenchint.o mov_chan.o rtp.o \
-                                            movenccenc.o rawutils.o
+                                            movenccenc.o movenc_ttml.o rawutils.o
 OBJS-$(CONFIG_MP2_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_MP3_DEMUXER)               += mp3dec.o replaygain.o
 OBJS-$(CONFIG_MP3_MUXER)                 += mp3enc.o rawenc.o id3v2enc.o
@@ -379,6 +381,7 @@ OBJS-$(CONFIG_NUT_MUXER)                 += nutenc.o nut.o
 OBJS-$(CONFIG_NUV_DEMUXER)               += nuv.o
 OBJS-$(CONFIG_AV1_DEMUXER)               += av1dec.o
 OBJS-$(CONFIG_OBU_DEMUXER)               += av1dec.o
+OBJS-$(CONFIG_OBU_MUXER)                 += rawenc.o
 OBJS-$(CONFIG_OGG_DEMUXER)               += oggdec.o         \
                                             oggparsecelt.o   \
                                             oggparsedirac.o  \
