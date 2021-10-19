@@ -190,8 +190,9 @@ enum AVFrameSideDataType {
     /**
      * This is RDS data in UECP format, possibly stored in data stream
      * elements (DSE) of AAC audio frames. Interpretation of DSE normally
-     * is dependent on context, but UECP radio data system data is identified
-     * by the STA and STP bytes.
+     * is dependent on context, UECP radio data system data is identified
+     * by the STA and STP bytes. UECP RDS data is also common in MPEG-1/2 audio,
+     * but currently not implemented.
      */
     AV_FRAME_DATA_RDS_DATA_PACKET
 };

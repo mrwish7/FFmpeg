@@ -64,7 +64,6 @@ enum AVAudioServiceType {
     AV_AUDIO_SERVICE_TYPE_EMERGENCY         = 6,
     AV_AUDIO_SERVICE_TYPE_VOICE_OVER        = 7,
     AV_AUDIO_SERVICE_TYPE_KARAOKE           = 8,
-    AV_AUDIO_SERVICE_TYPE_DSE               = 9,
     AV_AUDIO_SERVICE_TYPE_NB                   , ///< Not part of ABI
 };
 

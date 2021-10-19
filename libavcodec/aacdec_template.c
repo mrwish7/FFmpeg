@@ -1394,46 +1394,45 @@ static int decode_data_stream_element(AACContext *ac, GetBitContext *gb, int dse
         // This is in some programmes, don't know why
         if (count == 3 && buffer[0] == 0xbc && buffer[1] == 0xc0 && buffer[2] == 0x00) {
             // nothing
-        } else {
+        } else if (count >=1 ) {
             // Try to detect UECP radio data system data, as this is the
-            // only AAC side data we are currently interested in
-            // sometimes there is more than one UECP RDS message, the user application
-            // has to split it up. If it is distributed over several
+            // only AAC side data we are currently interested in.
+            // In some cases there are several UECP messages concated together, the user application
+            // has to split it up. If UECP messages are distributed over several
             // frames we try to do our best to collect it up to 1K.
-            if (count >= 1) {
-                /* if the RDS data is complete just put it into side data */
-                if (result_buffer_count + count + 1 < DSE_BUFFER_SIZE ) {
-                    memcpy(result_buffer + result_buffer_count, buffer, count);
-                    result_buffer_count += count;
-                } else {
-                    /* Overflow */
-                    result_buffer_count = 0;
-                    return 0;
-                }
-                // If buffer is not valid, but terminated with 0xff, try to start over (happens at the beginning of reception)
-                if (result_buffer_count >= 1 && result_buffer[0] != 0xfe 
-                    && result_buffer[result_buffer_count - 1] == 0xff) {
-                    result_buffer_count = 0;
-                }
-                if (result_buffer_count >= 1 && result_buffer[0] == 0xfe 
-                    && result_buffer[result_buffer_count - 1] == 0xff) {
-                    sd = av_frame_get_side_data(frame, AV_FRAME_DATA_RDS_DATA_PACKET);
+            if (result_buffer_count + count + 1 < DSE_BUFFER_SIZE ) {
+                memcpy(result_buffer + result_buffer_count, buffer, count);
+                result_buffer_count += count;
+            } else {
+                /* Overflow */
+                result_buffer_count = 0;
+                return 0;
+            }
+            // If buffer is not valid, but terminated with 0xff, try to start over
+            // This happens at the beginning of reception
+            if (result_buffer_count >= 1 && result_buffer[0] != 0xfe
+                && result_buffer[result_buffer_count - 1] == 0xff) {
+                result_buffer_count = 0;
+            }
+            /* if the RDS data is complete just put it into side data */
+            if (result_buffer_count >= 1 && result_buffer[0] == 0xfe
+                && result_buffer[result_buffer_count - 1] == 0xff) {
+                sd = av_frame_get_side_data(frame, AV_FRAME_DATA_RDS_DATA_PACKET);
+                if (!sd) {
+                    sd = av_frame_new_side_data(frame, AV_FRAME_DATA_RDS_DATA_PACKET, result_buffer_count);
                     if (!sd) {
-                        sd = av_frame_new_side_data(frame, AV_FRAME_DATA_RDS_DATA_PACKET, result_buffer_count);
-                        if (!sd) {
-                            return AVERROR(ENOMEM);
-                        }
-                        memcpy(sd->data, result_buffer, result_buffer_count);
-                    } else {
-                        // memory is already reserved
-                        if (!av_realloc(sd->data, result_buffer_count)) {
-                            return AVERROR(ENOMEM);
-                        }
-                        memcpy(sd->data, result_buffer, result_buffer_count);
-                        sd->size = count;
+                        return AVERROR(ENOMEM);
                     }
-                    result_buffer_count = 0;
+                    memcpy(sd->data, result_buffer, result_buffer_count);
+                } else {
+                    // memory is already reserved
+                    if (!av_realloc(sd->data, result_buffer_count)) {
+                        return AVERROR(ENOMEM);
+                    }
+                    memcpy(sd->data, result_buffer, result_buffer_count);
+                    sd->size = count;
                 }
+                result_buffer_count = 0;
             }
         }
     }
